@@ -1,22 +1,21 @@
 package main
 
 import (
-	"google.golang.org/grpc"
-	"net"
-	"fmt"
-	"log"
 	"flag"
+	"fmt"
+	"google.golang.org/grpc"
+	"log"
+	"net"
+	"order/internal/order"
 	pb "order/pkg/api/test"
 	"order/pkg/api/v1"
-	"order/internal/order"
 )
-
 
 var (
 	port = flag.Int("port", 50051, "The server port")
 )
 
-func main () {
+func main(){
 	storage := order.NewStorage()
 
 	OrderService := order.NewOrderService(storage)
