@@ -1,29 +1,30 @@
-package order
+package storage
 
 import (
     "fmt"
     "sync"
+    "order/internal/order/model"
 )
 
 type Storage struct {
     mu sync.RWMutex
-    orders map[string]*Order
+    orders map[string]*model.Order
 }
 
 func NewStorage() *Storage {
     return &Storage{
-        orders: make(map[string]*Order),
+        orders: make(map[string]*model.Order),
     }
 }
 
-func (s *Storage) Save(order *Order) (*Order, error) {
+func (s *Storage) Save(order *model.Order) (*model.Order, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
     s.orders[order.ID] = order
     return order, nil
 }
 
-func (s *Storage) FindByID(id string) (*Order, error) {
+func (s *Storage) FindByID(id string) (*model.Order, error) {
     s.mu.RLock()
     defer s.mu.RUnlock()
     order, ok := s.orders[id]
@@ -33,7 +34,7 @@ func (s *Storage) FindByID(id string) (*Order, error) {
     return order, nil
 }
 
-func (s *Storage) Update(order *Order) (*Order, error) {
+func (s *Storage) Update(order *model.Order) (*model.Order, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
     _, ok := s.orders[order.ID]
@@ -55,10 +56,10 @@ func (s *Storage) Delete(id string) (error) {
     return nil
 }
 
-func (s *Storage) List() ([]*Order, error) {
+func (s *Storage) List() ([]*model.Order, error) {
     s.mu.RLock()
     defer s.mu.RUnlock()
-    result := make([]*Order, 0, len(s.orders))
+    result := make([]*model.Order, 0, len(s.orders))
     for _, o := range s.orders {
 		result = append(result, o)
 	}
