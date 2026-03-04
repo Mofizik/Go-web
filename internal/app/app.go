@@ -33,12 +33,26 @@ func New(ctx context.Context) (*App, error) {
     // 2. setup logger
 	logger.Setup(env)
     log := logger.With("service", "order")
+    
 
     // 3. create grpc server
-    s := grpc.NewServer()
+    
     stor := storage.NewStorage()
     svc := service.NewOrderService(stor)
     srv := handler.NewOrderHandler(svc)
+
+    interceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+
+        log.Info("info", "method", info.FullMethod, "req", req)
+
+        resp, err = handler(ctx, req)
+
+        log.Info("resp", resp, "err", err)
+
+        return handler(ctx, req)
+    }
+    s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+
     pb.RegisterOrderServiceServer(s, srv)
     
 
@@ -59,7 +73,7 @@ func (a *App) Run() error {
     a.log.Info("Server listening", "addr", a.lis.Addr().String())
 
     if err := a.grpcServer.Serve(a.lis); err != nil {
-        a.log.Error("failed to serve: %v", err)
+        a.log.Error("failed to serve", "error", err)
         return err
     }
     return nil
