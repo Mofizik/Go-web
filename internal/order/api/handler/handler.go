@@ -4,6 +4,8 @@ import (
 	"context"
 	"order/internal/order/model"
 	pb "order/pkg/api/test"
+	"google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
 )
 
 type OrderServiceInterface interface {
@@ -60,10 +62,10 @@ func (h *OrderHandler) UpdateOrder(ctx context.Context, r *pb.UpdateOrderRequest
 }
 
 func (h *OrderHandler) DeleteOrder(ctx context.Context, r *pb.DeleteOrderRequest) (*pb.DeleteOrderResponse, error) {
-	if err := h.svc.DeleteOrder(r.Id); err != nil {
-		return nil, err
-	}
-	return &pb.DeleteOrderResponse{Success: true}, nil
+    if err := h.svc.DeleteOrder(r.Id); err != nil {
+        return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
+    }
+    return &pb.DeleteOrderResponse{Success: true}, nil
 }
 
 func (h *OrderHandler) ListOrders(ctx context.Context, r *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
