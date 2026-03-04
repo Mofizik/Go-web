@@ -1,35 +1,66 @@
 package app
 
 import (
-    "flag"
-    "fmt"
-    "log"
-    "net"
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
 	"order/internal/order/api/handler"
-    "google.golang.org/grpc"
-    "order/internal/order/storage"
-    "order/internal/order/service"
-    pb "order/pkg/api/test"
+	"order/internal/order/service"
+	"order/internal/order/storage"
+	pb "order/pkg/api/test"
+	"order/pkg/config"
+	"order/pkg/logger"
+
+	"google.golang.org/grpc"
 )
 
-func Run() {
-    port := flag.Int("port", 50051, "The server port")
-    flag.Parse() // ← не забыть
+type App struct {
+    grpcServer *grpc.Server
+    lis        net.Listener
+    log        *slog.Logger
+}
 
+
+func New(ctx context.Context) (*App, error) {
+    
+    //1. load env
+	if err := config.LoadDotEnv("internal/order/config/.env"); err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
+	env := config.Get("APP_ENV", "local")
+
+    // 2. setup logger
+	logger.Setup(env)
+    log := logger.With("service", "order")
+
+    // 3. create grpc server
+    s := grpc.NewServer()
     stor := storage.NewStorage()
     svc := service.NewOrderService(stor)
     srv := handler.NewOrderHandler(svc)
-
-    lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
-    if err != nil {
-        log.Fatalf("failed to listen: %v", err)
-    }
-
-    s := grpc.NewServer()
     pb.RegisterOrderServiceServer(s, srv)
+    
 
-    log.Printf("server listening at %v", lis.Addr())
-    if err := s.Serve(lis); err != nil {
-        log.Fatalf("failed to serve: %v", err)
+    port := config.MustGet("GRPC_PORT")
+    lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+    if err != nil {
+        return nil, fmt.Errorf("app.New failed to listen: %w", err)
     }
+
+	return &App{
+        grpcServer: s,
+        lis: lis,
+        log: log,
+
+	}, nil
+}
+func (a *App) Run() error {
+    a.log.Info("Server listening", "addr", a.lis.Addr().String())
+
+    if err := a.grpcServer.Serve(a.lis); err != nil {
+        a.log.Error("failed to serve: %v", err)
+        return err
+    }
+    return nil
 }
