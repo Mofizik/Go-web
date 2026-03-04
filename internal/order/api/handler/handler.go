@@ -36,33 +36,35 @@ func convertOrderStruct(o *model.Order) *pb.Order {
 func (h *OrderHandler) CreateOrder(ctx context.Context, r *pb.CreateOrderRequest) (*pb.CreateOrderResponse, error) {
 	id, err := h.svc.CreateOrder(r.Item, r.Quantity)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "failed to create order: %v", err)
 	}
 	return &pb.CreateOrderResponse{Id: id}, nil
 }
 
 func (h *OrderHandler) GetOrder(ctx context.Context, r *pb.GetOrderRequest) (*pb.GetOrderResponse, error) {
-	o, err := h.svc.GetOrder(r.Id)
-	if err != nil {
-		return nil, err
-	}
-	return &pb.GetOrderResponse{Order: convertOrderStruct(o)}, nil
+    o, err := h.svc.GetOrder(r.Id)
+    if err != nil {
+        return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
+    }
+    return &pb.GetOrderResponse{Order: convertOrderStruct(o)}, nil
 }
 
+
 func (h *OrderHandler) UpdateOrder(ctx context.Context, r *pb.UpdateOrderRequest) (*pb.UpdateOrderResponse, error) {
-	o, err := h.svc.UpdateOrder(&model.Order{
-		ID:       r.Id,
-		Item:     r.Item,
-		Quantity: r.Quantity,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &pb.UpdateOrderResponse{Order: convertOrderStruct(o)}, nil
+    o, err := h.svc.UpdateOrder(&model.Order{
+        ID:       r.Id,
+        Item:     r.Item,
+        Quantity: r.Quantity,
+    })
+    if err != nil {
+        return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
+    }
+    return &pb.UpdateOrderResponse{Order: convertOrderStruct(o)}, nil
 }
 
 func (h *OrderHandler) DeleteOrder(ctx context.Context, r *pb.DeleteOrderRequest) (*pb.DeleteOrderResponse, error) {
-    if err := h.svc.DeleteOrder(r.Id); err != nil {
+	err := h.svc.DeleteOrder(r.Id)
+    if err != nil {
         return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
     }
     return &pb.DeleteOrderResponse{Success: true}, nil
@@ -71,7 +73,7 @@ func (h *OrderHandler) DeleteOrder(ctx context.Context, r *pb.DeleteOrderRequest
 func (h *OrderHandler) ListOrders(ctx context.Context, r *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
 	orders, err := h.svc.ListOrders()
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "failed to list orders: %v", err)
 	}
 	response := make([]*pb.Order, 0, len(orders))
 	for _, o := range orders {

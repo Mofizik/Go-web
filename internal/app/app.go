@@ -13,6 +13,7 @@ import (
 	"order/pkg/logger"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 type App struct {
@@ -52,6 +53,7 @@ func New(ctx context.Context) (*App, error) {
 	s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
 	pb.RegisterOrderServiceServer(s, srv)
+    reflection.Register(s)
 
 	port := config.MustGet("GRPC_PORT")
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
