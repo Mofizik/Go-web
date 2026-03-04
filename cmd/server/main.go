@@ -1,13 +1,13 @@
 package main
 
 import (
-    "order/internal/app"
 	"context"
+	"order/internal/app"
 )
 
 func main() {
 	ctx := context.Background()
-    a, err := app.New(ctx)
+	a, err := app.New(ctx)
 	if err != nil {
 		return
 	}

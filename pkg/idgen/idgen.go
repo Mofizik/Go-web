@@ -7,7 +7,7 @@ import (
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func GenerateId (leng int) string {
+func GenerateId(leng int) string {
 	var sb strings.Builder
 	sb.Grow(leng)
 	for range leng {

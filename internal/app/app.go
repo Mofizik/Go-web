@@ -16,65 +16,61 @@ import (
 )
 
 type App struct {
-    grpcServer *grpc.Server
-    lis        net.Listener
-    log        *slog.Logger
+	grpcServer *grpc.Server
+	lis        net.Listener
+	log        *slog.Logger
 }
 
-
 func New(ctx context.Context) (*App, error) {
-    
-    //1. load env
+
+	//1. load env
 	if err := config.LoadDotEnv("internal/order/config/.env"); err != nil {
 		return nil, fmt.Errorf("app.New: %w", err)
 	}
 	env := config.Get("APP_ENV", "local")
 
-    // 2. setup logger
+	// 2. setup logger
 	logger.Setup(env)
-    log := logger.With("service", "order")
-    
+	log := logger.With("service", "order")
 
-    // 3. create grpc server
-    
-    stor := storage.NewStorage()
-    svc := service.NewOrderService(stor)
-    srv := handler.NewOrderHandler(svc)
+	// 3. create grpc server
 
-    interceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	stor := storage.NewStorage()
+	svc := service.NewOrderService(stor)
+	srv := handler.NewOrderHandler(svc)
 
-        log.Info("info", "method", info.FullMethod, "req", req)
+	interceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 
-        resp, err = handler(ctx, req)
+		log.Info("info", "method", info.FullMethod, "req", req)
 
-        log.Info("resp", resp, "err", err)
+		resp, err = handler(ctx, req)
 
-        return handler(ctx, req)
-    }
-    s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+		log.Info("resp", resp, "err", err)
 
-    pb.RegisterOrderServiceServer(s, srv)
-    
+		return handler(ctx, req)
+	}
+	s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
-    port := config.MustGet("GRPC_PORT")
-    lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
-    if err != nil {
-        return nil, fmt.Errorf("app.New failed to listen: %w", err)
-    }
+	pb.RegisterOrderServiceServer(s, srv)
+
+	port := config.MustGet("GRPC_PORT")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	if err != nil {
+		return nil, fmt.Errorf("app.New failed to listen: %w", err)
+	}
 
 	return &App{
-        grpcServer: s,
-        lis: lis,
-        log: log,
-
+		grpcServer: s,
+		lis:        lis,
+		log:        log,
 	}, nil
 }
 func (a *App) Run() error {
-    a.log.Info("Server listening", "addr", a.lis.Addr().String())
+	a.log.Info("Server listening", "addr", a.lis.Addr().String())
 
-    if err := a.grpcServer.Serve(a.lis); err != nil {
-        a.log.Error("failed to serve", "error", err)
-        return err
-    }
-    return nil
+	if err := a.grpcServer.Serve(a.lis); err != nil {
+		a.log.Error("failed to serve", "error", err)
+		return err
+	}
+	return nil
 }

@@ -13,18 +13,17 @@ install-deps:
 	export PATH="$PATH:$(go env GOPATH)/bin"
 
 # Компиляция
-.PHONY: protoc
-protoc: install-deps
+.PHONY: generate
+generate: install-deps
 	@echo "Compiling .proto files"
-	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./${PROTO_FILE}
+	protoc --go_out=. --go_opt=paths=source_relative \
+	       --go-grpc_out=. --go-grpc_opt=paths=source_relative ./${PROTO_FILE}
 
-# Создание сервера
 .PHONY: build
-build: protoc
+build: generate
 	@echo "Building binary..."
 	go build -o main ${SERVER_FILE}
 
-# Запуск сервера
 .PHONY: run
 run: build
 	@echo "Running server..."
