@@ -48,7 +48,7 @@ func New(ctx context.Context) (*App, error) {
 
 		log.Info("resp", resp, "err", err)
 
-		return handler(ctx, req)
+		return resp, err
 	}
 	s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
