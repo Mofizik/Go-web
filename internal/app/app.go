@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -9,8 +10,14 @@ import (
 	"order/internal/order/service"
 	"order/internal/order/storage"
 	pb "order/pkg/api/test"
+	"order/pkg/closer"
 	"order/pkg/config"
+	"order/pkg/grpcmw"
 	"order/pkg/logger"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -20,6 +27,7 @@ type App struct {
 	grpcServer *grpc.Server
 	lis        net.Listener
 	log        *slog.Logger
+	closer	   *closer.Closer
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -40,17 +48,7 @@ func New(ctx context.Context) (*App, error) {
 	svc := service.NewOrderService(stor)
 	srv := handler.NewOrderHandler(svc)
 
-	interceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-
-		log.Info("info", "method", info.FullMethod, "req", req)
-
-		resp, err = handler(ctx, req)
-
-		log.Info("resp", resp, "err", err)
-
-		return resp, err
-	}
-	s := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	s := grpc.NewServer(grpc.UnaryInterceptor(grpcmw.UnaryServerLoggingInterceptor(log)))
 
 	pb.RegisterOrderServiceServer(s, srv)
     reflection.Register(s)
@@ -61,18 +59,59 @@ func New(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("app.New failed to listen: %w", err)
 	}
 
+	shutdownCloser := closer.New(log)
+	
 	return &App{
 		grpcServer: s,
 		lis:        lis,
 		log:        log,
+		closer:	   shutdownCloser,
 	}, nil
 }
 func (a *App) Run() error {
-	a.log.Info("Server listening", "addr", a.lis.Addr().String())
+    a.closer.AddFunc("grpc listener", func() {
+        _ = a.lis.Close()
+    })
+    a.closer.Add("close grpc server", func(ctx context.Context) error {
+        done := make(chan struct{})
+        go func() {
+            a.grpcServer.GracefulStop()
+            close(done)
+        }()
+        select {
+        case <-done:
+            return nil
+        case <-ctx.Done():
+            a.grpcServer.Stop()
+            <-done
+            return ctx.Err()
+        }
+    })
 
-	if err := a.grpcServer.Serve(a.lis); err != nil {
-		a.log.Error("failed to serve", "error", err)
-		return err
-	}
-	return nil
+    sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
+
+    go func() {
+        <-sigCtx.Done()
+        a.log.Info("shutdown signal received")
+        stop()
+
+        shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        if err := a.closer.Close(shutdownCtx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+            a.log.Error("graceful shutdown error", "error", err)
+        }
+        a.log.Info("app.Run shutdown complete")
+    }()
+
+    a.log.Info("Server listening", "addr", a.lis.Addr().String())
+    if err := a.grpcServer.Serve(a.lis); err != nil {
+        if sigCtx.Err() != nil {
+            return nil
+        }
+        return fmt.Errorf("app.Run: %w", err)
+    }
+
+    return nil
 }
