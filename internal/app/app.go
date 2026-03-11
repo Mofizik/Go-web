@@ -16,10 +16,13 @@ import (
 	"order/pkg/logger"
 	"os"
 	"os/signal"
+
 	"syscall"
 	"time"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -50,10 +53,18 @@ func New(ctx context.Context) (*App, error) {
 
 	s := grpc.NewServer(grpc.UnaryInterceptor(grpcmw.UnaryServerLoggingInterceptor(log)))
 
+	// 4. create http server
+	gwMux := runtime.NewServeMux()
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	
+	
+
 	pb.RegisterOrderServiceServer(s, srv)
     reflection.Register(s)
 
 	port := config.MustGet("GRPC_PORT")
+	pb.RegisterOrderServiceHandlerFromEndpoint(ctx, gwMux, fmt.Sprintf("localhost:%s", port), opts)
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		return nil, fmt.Errorf("app.New failed to listen: %w", err)

@@ -1,26 +1,30 @@
-
-
 all: run
 
 PROTO_FILE=order.proto
 SERVER_FILE=cmd/server/main.go
-# Установка зависимостей
+
+# Установка зависимостей
 .PHONY: install-deps
 install-deps:
 	@echo "Installing protobuf dependencies..."
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	export PATH="$PATH:$(go env GOPATH)/bin"
+	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+	export PATH="$$PATH:$(shell go env GOPATH)/bin"
 
 # Компиляция
 .PHONY: generate
-generate: install-deps
+generate:
 	@echo "Compiling .proto files"
-	protoc --go_out=. --go_opt=paths=source_relative \
-	       --go-grpc_out=. --go-grpc_opt=paths=source_relative ./${PROTO_FILE}
+	protoc --go_out=. \
+       --go-grpc_out=. \
+       --grpc-gateway_out=. \
+       -I . -I third_party \
+       ./order.proto
+	       ./${PROTO_FILE}
 
 .PHONY: build
-build: generate
+build:
 	@echo "Building binary..."
 	go build -o main ${SERVER_FILE}
 
