@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"order/internal/order/api/handler"
 	"order/internal/order/service"
 	"order/internal/order/storage"
@@ -13,6 +14,7 @@ import (
 	"order/pkg/closer"
 	"order/pkg/config"
 	"order/pkg/grpcmw"
+	"order/pkg/httpmw"
 	"order/pkg/logger"
 	"os"
 	"os/signal"
@@ -28,6 +30,7 @@ import (
 
 type App struct {
 	grpcServer *grpc.Server
+	httpServer *http.Server
 	lis        net.Listener
 	log        *slog.Logger
 	closer	   *closer.Closer
@@ -62,18 +65,25 @@ func New(ctx context.Context) (*App, error) {
 	pb.RegisterOrderServiceServer(s, srv)
     reflection.Register(s)
 
-	port := config.MustGet("GRPC_PORT")
-	pb.RegisterOrderServiceHandlerFromEndpoint(ctx, gwMux, fmt.Sprintf("localhost:%s", port), opts)
+	grpcPort := config.MustGet("GRPC_PORT")
+	pb.RegisterOrderServiceHandlerFromEndpoint(ctx, gwMux, fmt.Sprintf("localhost:%s", grpcPort), opts) // Register http handler to grpc gateway
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", grpcPort))
 	if err != nil {
 		return nil, fmt.Errorf("app.New failed to listen: %w", err)
+	}
+	
+	httpPort := config.MustGet("HTTP_PORT")
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%s", httpPort),
+		Handler: httpmw.LoggingMiddleware(log)(gwMux),
 	}
 
 	shutdownCloser := closer.New(log)
 	
 	return &App{
 		grpcServer: s,
+		httpServer: httpServer,
 		lis:        lis,
 		log:        log,
 		closer:	   shutdownCloser,
@@ -98,6 +108,10 @@ func (a *App) Run() error {
             return ctx.Err()
         }
     })
+	
+	a.closer.Add("http server", func(ctx context.Context) error {
+		return a.httpServer.Shutdown(ctx)
+	})
 
     sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
     defer stop()
@@ -114,15 +128,22 @@ func (a *App) Run() error {
             a.log.Error("graceful shutdown error", "error", err)
         }
         a.log.Info("app.Run shutdown complete")
+		fmt.Println("Server Stopped")
     }()
+	
+	a.log.Info("http server listening", "addr", a.httpServer.Addr)
+	go a.httpServer.ListenAndServe()
 
-    a.log.Info("Server listening", "addr", a.lis.Addr().String())
+    a.log.Info("gRPC server listening", "addr", a.lis.Addr().String())
     if err := a.grpcServer.Serve(a.lis); err != nil {
         if sigCtx.Err() != nil {
             return nil
         }
         return fmt.Errorf("app.Run: %w", err)
     }
+
+	
+
 
     return nil
 }
