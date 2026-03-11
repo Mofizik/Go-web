@@ -18,7 +18,6 @@ func UnaryServerLoggingInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor
 		log.Info(
 			"method", info.FullMethod,
 			"req", req,
-			"resp", resp,
 			"duration", time.Since(start),
 			"code", code.String(),
 			"err", err,
