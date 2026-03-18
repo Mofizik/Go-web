@@ -1,0 +1,39 @@
+services:
+  app:
+    networks:
+      - order_network
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: order_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.example
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+
+  postgres:
+    networks:
+      - order_network
+    image: postgres:17-alpine
+    container_name: order_service_db
+    env_file:
+      - .env.example
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  order_network:
+
+volumes:
+  postgres_data:
