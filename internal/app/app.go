@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"order/internal/order/api/handler"
+	"order/internal/order/migrations"
 	"order/internal/order/service"
 	"order/internal/order/storage"
 	pb "order/pkg/api/test"
@@ -16,6 +17,8 @@ import (
 	"order/pkg/grpcmw"
 	"order/pkg/httpmw"
 	"order/pkg/logger"
+	"order/pkg/migrator"
+	"order/pkg/postgres"
 	"os"
 	"os/signal"
 
@@ -23,6 +26,8 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
@@ -34,6 +39,7 @@ type App struct {
 	lis        net.Listener
 	log        *slog.Logger
 	closer	   *closer.Closer
+	pool       *pgxpool.Pool
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -43,20 +49,39 @@ func New(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("app.New: %w", err)
 	}
 	env := config.Get("APP_ENV", "local")
+	dsn := config.MustGet("DATABASE_URL")
 
-	// 2. setup logger
+	//2. setup logger
+
 	logger.Setup(env)
 	log := logger.With("service", "order")
 
-	// 3. create grpc server
+	// 3. setup db
+	
+	pool, err := postgres.NewPool(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
 
-	stor := storage.NewStorage()
+	sqlDB := stdlib.OpenDBFromPool(pool)
+
+	m, err := migrator.EmbedMigrations(sqlDB, migrations.FS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
+	if err := m.Up(); err != nil {
+		return nil, fmt.Errorf("app.New: %w", err)
+	}
+
+	// 4. create grpc server
+
+	stor := storage.NewStorage(pool)
 	svc := service.NewOrderService(stor)
 	srv := handler.NewOrderHandler(svc)
 
 	s := grpc.NewServer(grpc.UnaryInterceptor(grpcmw.UnaryServerLoggingInterceptor(log)))
 
-	// 4. create http server
+	// 5. create http server
 	gwMux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	
@@ -87,12 +112,16 @@ func New(ctx context.Context) (*App, error) {
 		lis:        lis,
 		log:        log,
 		closer:	   shutdownCloser,
+		pool:       pool,
 	}, nil
 }
 func (a *App) Run() error {
     a.closer.AddFunc("grpc listener", func() {
         _ = a.lis.Close()
     })
+
+	a.closer.AddFunc("postgres pool", a.pool.Close)
+
     a.closer.Add("close grpc server", func(ctx context.Context) error {
         done := make(chan struct{})
         go func() {
