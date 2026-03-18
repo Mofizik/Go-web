@@ -9,11 +9,11 @@ import (
 )
 
 type OrderServiceInterface interface {
-	CreateOrder(item string, quantity int32) (string, error)
-	GetOrder(id string) (*model.Order, error)
-	UpdateOrder(o *model.Order) (*model.Order, error)
-	DeleteOrder(id string) error
-	ListOrders() ([]*model.Order, error)
+	CreateOrder(ctx context.Context, item string, quantity int32) (string, error)
+	GetOrder(ctx context.Context, id string) (*model.Order, error)
+	UpdateOrder(ctx context.Context, o *model.Order) (*model.Order, error)
+	DeleteOrder(ctx context.Context, id string) error
+	ListOrders(ctx context.Context) ([]*model.Order, error)
 }
 
 type OrderHandler struct {
@@ -34,7 +34,7 @@ func convertOrderStruct(o *model.Order) *pb.Order {
 }
 
 func (h *OrderHandler) CreateOrder(ctx context.Context, r *pb.CreateOrderRequest) (*pb.CreateOrderResponse, error) {
-	id, err := h.svc.CreateOrder(r.Item, r.Quantity)
+	id, err := h.svc.CreateOrder(ctx, r.Item, r.Quantity)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create order: %v", err)
 	}
@@ -42,7 +42,7 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, r *pb.CreateOrderRequest
 }
 
 func (h *OrderHandler) GetOrder(ctx context.Context, r *pb.GetOrderRequest) (*pb.GetOrderResponse, error) {
-    o, err := h.svc.GetOrder(r.Id)
+    o, err := h.svc.GetOrder(ctx, r.Id)
     if err != nil {
         return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
     }
@@ -51,7 +51,7 @@ func (h *OrderHandler) GetOrder(ctx context.Context, r *pb.GetOrderRequest) (*pb
 
 
 func (h *OrderHandler) UpdateOrder(ctx context.Context, r *pb.UpdateOrderRequest) (*pb.UpdateOrderResponse, error) {
-    o, err := h.svc.UpdateOrder(&model.Order{
+    o, err := h.svc.UpdateOrder(ctx, &model.Order{
         ID:       r.Id,
         Item:     r.Item,
         Quantity: r.Quantity,
@@ -63,7 +63,7 @@ func (h *OrderHandler) UpdateOrder(ctx context.Context, r *pb.UpdateOrderRequest
 }
 
 func (h *OrderHandler) DeleteOrder(ctx context.Context, r *pb.DeleteOrderRequest) (*pb.DeleteOrderResponse, error) {
-	err := h.svc.DeleteOrder(r.Id)
+	err := h.svc.DeleteOrder(ctx, r.Id)
     if err != nil {
         return nil, status.Errorf(codes.NotFound, "order not found: %s", r.Id)
     }
@@ -71,7 +71,7 @@ func (h *OrderHandler) DeleteOrder(ctx context.Context, r *pb.DeleteOrderRequest
 }
 
 func (h *OrderHandler) ListOrders(ctx context.Context, r *pb.ListOrdersRequest) (*pb.ListOrdersResponse, error) {
-	orders, err := h.svc.ListOrders()
+	orders, err := h.svc.ListOrders(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list orders: %v", err)
 	}

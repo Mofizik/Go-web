@@ -10,7 +10,7 @@ import (
 	"order/internal/order/api/handler"
 	"order/internal/order/migrations"
 	"order/internal/order/service"
-	"order/internal/order/storage"
+	"order/internal/order/repository"
 	pb "order/pkg/api/test"
 	"order/pkg/closer"
 	"order/pkg/config"
@@ -75,7 +75,7 @@ func New(ctx context.Context) (*App, error) {
 
 	// 4. create grpc server
 
-	stor := storage.NewStorage(pool)
+	stor := repository.NewRepository(pool)
 	svc := service.NewOrderService(stor)
 	srv := handler.NewOrderHandler(svc)
 

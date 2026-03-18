@@ -9,7 +9,7 @@ func main() {
 	ctx := context.Background()
 	a, err := app.New(ctx)
 	if err != nil {
-		return
+		panic(err)
 	}
 	if err := a.Run(); err != nil {
 		panic(err)
